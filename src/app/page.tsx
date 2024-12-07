@@ -1,101 +1,326 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import { ethers } from "ethers";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [wallet, setWallet] = useState<string | null>(null);
+  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("default");
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  // Add new state for tracking the last checked block
+  const [lastCheckedBlock, setLastCheckedBlock] = useState<number>(0);
+
+  // Connect wallet function
+  const connectWallet = async () => {
+    if (typeof window.ethereum !== "undefined") {
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_requestAccounts", []);
+        setWallet(accounts[0]);
+        setProvider(provider);
+      } catch (error) {
+        console.error("Error connecting wallet:", error);
+      }
+    } else {
+      toast.error("Please install MetaMask!");
+    }
+  };
+
+  // Function to check for new transactions
+  const checkNewTransactions = async () => {
+    if (!provider || !wallet) return;
+
+    try {
+      const currentBlock = await provider.getBlockNumber();
+
+      // Only check new blocks
+      if (currentBlock > lastCheckedBlock) {
+        // Check last 10 blocks if it's the first time
+        const startBlock =
+          lastCheckedBlock === 0 ? currentBlock - 10 : lastCheckedBlock + 1;
+
+        for (let i = startBlock; i <= currentBlock; i++) {
+          const block = await provider.getBlock(i, true);
+          if (block && block.transactions) {
+            block.transactions.forEach((tx) => {
+              if (tx.to?.toLowerCase() === wallet.toLowerCase()) {
+                const amount = ethers.formatEther(tx.value);
+                setRecentTransactions((prev) =>
+                  [
+                    {
+                      hash: tx.hash,
+                      amount,
+                      timestamp: new Date().toLocaleString(),
+                    },
+                    ...prev,
+                  ].slice(0, 5)
+                );
+
+                // Show toast based on selected template
+                switch (selectedTemplate) {
+                  case "minimal":
+                    toast.success(
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                          <span className="text-sm">💰</span>
+                        </div>
+                        <span className="font-medium">{amount} ETH</span>
+                      </div>,
+                      {
+                        style: {
+                          background:
+                            "linear-gradient(to right, #2d3748, #1a202c)",
+                          borderRadius: "8px",
+                          padding: "12px",
+                          color: "#fff",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                          border: "1px solid rgba(255, 255, 255, 0.1)",
+                        },
+                      }
+                    );
+                    break;
+                  case "detailed":
+                    toast.success(
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                            <span className="text-sm">💰</span>
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm">
+                              New Transaction!
+                            </p>
+                            <p className="text-gray-300 text-sm">
+                              {amount} ETH
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              From: {tx.from.slice(0, 6)}...{tx.from.slice(-4)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>,
+                      {
+                        style: {
+                          background:
+                            "linear-gradient(to right, #2d3748, #1a202c)",
+                          borderRadius: "8px",
+                          padding: "12px",
+                          color: "#fff",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                          border: "1px solid rgba(255, 255, 255, 0.1)",
+                        },
+                      }
+                    );
+                    break;
+                  default:
+                    toast.success(
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                          <span className="text-sm">💰</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{amount} ETH</p>
+                          <p className="text-gray-300 text-sm">
+                            New transaction received!
+                          </p>
+                        </div>
+                      </div>,
+                      {
+                        style: {
+                          background:
+                            "linear-gradient(to right, #2d3748, #1a202c)",
+                          borderRadius: "8px",
+                          padding: "12px",
+                          color: "#fff",
+                          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                          border: "1px solid rgba(255, 255, 255, 0.1)",
+                        },
+                        position: "top-right",
+                        autoClose: 5000,
+                        hideProgressBar: false,
+                        closeOnClick: true,
+                        pauseOnHover: true,
+                        draggable: true,
+                      }
+                    );
+                }
+              }
+            });
+          }
+        }
+        setLastCheckedBlock(currentBlock);
+      }
+    } catch (error) {
+      console.error("Error checking transactions:", error);
+    }
+  };
+
+  // Add function to simulate transactions
+  const simulateDummyTransaction = () => {
+    const randomAmount = (Math.random() * 1).toFixed(4);
+    const randomAddress =
+      "0x" +
+      Array(40)
+        .fill(0)
+        .map(() => Math.floor(Math.random() * 16).toString(16))
+        .join("");
+
+    const customToastStyle = {
+      background: "linear-gradient(to right, #2d3748, #1a202c)",
+      borderRadius: "8px",
+      padding: "12px",
+      color: "#fff",
+      boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+      border: "1px solid rgba(255, 255, 255, 0.1)",
+    };
+
+    switch (selectedTemplate) {
+      case "minimal":
+        toast.success(
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-sm">💰</span>
+            </div>
+            <span className="font-medium">{randomAmount} ETH</span>
+          </div>,
+          { style: customToastStyle }
+        );
+        break;
+      case "detailed":
+        toast.success(
+          <div className="space-y-2">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-sm">💰</span>
+              </div>
+              <div>
+                <p className="font-bold text-sm">New Transaction!</p>
+                <p className="text-gray-300 text-sm">{randomAmount} ETH</p>
+                <p className="text-gray-400 text-xs">
+                  From: {randomAddress.slice(0, 6)}...{randomAddress.slice(-4)}
+                </p>
+              </div>
+            </div>
+          </div>,
+          { style: customToastStyle }
+        );
+        break;
+      default:
+        toast.success(
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-sm">💰</span>
+            </div>
+            <div>
+              <p className="font-medium">{randomAmount} ETH</p>
+              <p className="text-gray-300 text-sm">New transaction received!</p>
+            </div>
+          </div>,
+          {
+            style: customToastStyle,
+            position: "top-right",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          }
+        );
+    }
+  };
+
+  // Modify the useEffect to include dummy messages
+  useEffect(() => {
+    if (provider && wallet) {
+      // Initial check
+      checkNewTransactions();
+
+      // Set up polling interval (every 15 seconds)
+      const interval = setInterval(checkNewTransactions, 15000);
+
+      // Also keep the block listener for real-time updates
+      provider.on("block", async (blockNumber) => {
+        setLastCheckedBlock(blockNumber - 1); // Trigger polling check
+      });
+    }
+
+    return () => {
+      if (provider) {
+        provider.removeAllListeners();
+      }
+    };
+  }, [provider, wallet, selectedTemplate]);
+
+  return (
+    <div className="min-h-screen bg-transparent p-4 flex items-center justify-center">
+      <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700">
+        <div className="flex justify-center mb-6">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
+            <img 
+              src="/Superr.png" 
+              alt="Superr Chat Logo" 
+              className="w-24 h-24 rounded-full relative z-10 ring-2 ring-blue-500/50 ring-offset-2 ring-offset-gray-800" 
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600 mb-8 text-center">
+          Superr Chat
+        </h1>
+        {!wallet ? (
+          <button
+            onClick={connectWallet}
+            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3.5 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-500/25 transform hover:scale-[1.02]"
+          >
+            Connect Wallet
+          </button>
+        ) : (
+          <div className="space-y-5">
+            <div className="bg-gray-800/50 backdrop-blur-sm p-5 rounded-xl border border-gray-700">
+              <p className="text-gray-400 mb-2 text-sm font-medium">Connected Wallet</p>
+              <p className="text-white font-semibold tracking-wide">
+                {wallet.slice(0, 6)}...{wallet.slice(-4)}
+              </p>
+            </div>
+
+            <div className="bg-gray-800/50 backdrop-blur-sm p-5 rounded-xl border border-gray-700">
+              <p className="text-gray-400 mb-3 text-sm font-medium">Select Toast Template</p>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+                className="w-full bg-gray-900/90 text-white p-3 rounded-lg mb-4 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all duration-200"
+              >
+                <option value="default">Default</option>
+                <option value="minimal">Minimal</option>
+                <option value="detailed">Detailed</option>
+              </select>
+
+              <button
+                onClick={simulateDummyTransaction}
+                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg shadow-blue-500/25 transform hover:scale-[1.02]"
+              >
+                Simulate Transaction
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <ToastContainer
+        theme="dark"
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
     </div>
   );
 }
